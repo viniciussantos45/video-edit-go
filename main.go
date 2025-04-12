@@ -17,11 +17,13 @@ import (
 func main() {
 	fmt.Println("Hello, World!")
 
-	err := generateAnimationMP4("output.gif")
+	// Generate the GIF with transparency
+	gifFile := "animation.gif"
+	err := generateAnimationMP4(gifFile)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("MP4 gerado com sucesso!")
+	fmt.Println("GIF gerado com sucesso!")
 
 	first, err := moviego.Load("forest.mp4")
 	if err != nil {
@@ -57,7 +59,13 @@ func main() {
 		},
 	)
 
+	// Generate the concatenated video
 	concat.Output("concat.mp4").Run()
+
+	// Now overlay the GIF on the final video
+	overlayGIFOnVideo("concat.mp4", gifFile, "final_with_gif.mp4")
+
+	fmt.Println("Video final com GIF gerado com sucesso!")
 }
 
 func generateAnimationMP4(outputFile string) error {
@@ -173,6 +181,25 @@ func generateAnimationMP4(outputFile string) error {
 		"-loop", "0",
 		strings.Replace(outputFile, ".mp4", ".gif", 1),
 	)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// OverlayGIFOnVideo adds a GIF to a video using ffmpeg
+func overlayGIFOnVideo(videoFile, gifFile, outputFile string) error {
+	// Use ffmpeg to overlay the GIF on the video
+	// Position: 10px from top-right corner
+	cmd := exec.Command(
+		"ffmpeg", "-y",
+		"-i", videoFile,
+		"-ignore_loop", "0", // Make sure animated GIF loops
+		"-i", gifFile,
+		"-filter_complex", "[0:v][1:v]overlay=main_w-overlay_w-10:10:shortest=1",
+		"-c:a", "copy", // Copy audio stream
+		outputFile,
+	)
+
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
