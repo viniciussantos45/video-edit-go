@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 func main() {
 	fmt.Println("Hello, World!")
 
-	err := generateAnimationMP4("output.mp4")
+	err := generateAnimationMP4("output.gif")
 	if err != nil {
 		panic(err)
 	}
@@ -59,14 +60,13 @@ func main() {
 }
 
 func generateAnimationMP4(outputFile string) error {
-	// HTML temporário com anime.js + animação
 	html := `
 		<!DOCTYPE html>
 		<html>
 		<head>
 			<meta charset="utf-8">
 			<style>
-				/* body { background: white; display: flex; justify-content: center; align-items: center; height: 100vh; } */
+				body { background: transparent; }
 				.container { display: flex; flex-direction: column; gap: 10px; }
 				.square { width: 30px; height: 30px; background: #f43f5e; }
 			</style>
@@ -122,10 +122,12 @@ func generateAnimationMP4(outputFile string) error {
 		time.Sleep(time.Second / time.Duration(frameRate))
 	}
 
-	// Gera o vídeo com ffmpeg
+	// Gera o GIF com ffmpeg
 	cmd := exec.Command("ffmpeg", "-y", "-framerate", fmt.Sprint(frameRate),
 		"-i", filepath.Join(tmpDir, "frame-%03d.png"),
-		"-pix_fmt", "yuv420p", outputFile,
+		"-vf", "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
+		"-loop", "0",
+		strings.Replace(outputFile, ".gif", ".gif", 1),
 	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
