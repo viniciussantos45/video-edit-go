@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/mowshon/moviego"
 )
 
@@ -66,9 +67,22 @@ func generateAnimationMP4(outputFile string) error {
 		<head>
 			<meta charset="utf-8">
 			<style>
-				body { background: transparent; }
-				.container { display: flex; flex-direction: column; gap: 10px; }
-				.square { width: 30px; height: 30px; background: #f43f5e; }
+				html, body { 
+					background: transparent !important;
+					margin: 0;
+					padding: 0;
+				}
+				.container { 
+					display: flex; 
+					flex-direction: column; 
+					gap: 10px;
+					background: transparent;
+				}
+				.square { 
+					width: 30px; 
+					height: 30px; 
+					background: #f43f5e; 
+				}
 			</style>
 		</head>
 		<body>
@@ -107,27 +121,46 @@ func generateAnimationMP4(outputFile string) error {
 
 	// Inicia o navegador headless
 	browser := rod.New().MustConnect()
-	page := browser.MustPage("file://" + filepath.Join(getCWD(), tmpHtml))
+
+	// Configure browser for transparency
+	page := browser.MustPage("")
+	page.MustSetViewport(800, 600, 1, false)
+	page.MustNavigate("file://" + filepath.Join(getCWD(), tmpHtml))
 	page.MustWaitLoad()
+
+	// Set transparent background using a different approach
+	page.MustEval(`() => {
+		document.documentElement.style.backgroundColor = 'transparent';
+		document.body.style.backgroundColor = 'transparent';
+	}`)
 
 	// Espera animação inicializar
 	time.Sleep(1 * time.Second)
 
-	// Captura de frames
+	// Captura de frames with transparency
 	frameCount := 60
 	frameRate := 20
 	for i := 0; i < frameCount; i++ {
 		imgPath := filepath.Join(tmpDir, fmt.Sprintf("frame-%03d.png", i))
-		page.MustScreenshot(imgPath)
+
+		// Use the correct Screenshot method with transparency
+		data, _ := page.Screenshot(false, &proto.PageCaptureScreenshot{
+			Format:      proto.PageCaptureScreenshotFormatPng,
+			FromSurface: true, // This is crucial for transparency
+		})
+
+		// Save the screenshot
+		os.WriteFile(imgPath, data, 0644)
+
 		time.Sleep(time.Second / time.Duration(frameRate))
 	}
 
 	// Gera o GIF com ffmpeg
 	cmd := exec.Command("ffmpeg", "-y", "-framerate", fmt.Sprint(frameRate),
 		"-i", filepath.Join(tmpDir, "frame-%03d.png"),
-		"-vf", "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
+		"-vf", "split[s0][s1];[s0]palettegen=reserve_transparent=1[p];[s1][p]paletteuse=alpha_threshold=128",
 		"-loop", "0",
-		strings.Replace(outputFile, ".gif", ".gif", 1),
+		strings.Replace(outputFile, ".mp4", ".gif", 1),
 	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
