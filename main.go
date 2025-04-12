@@ -68,15 +68,17 @@ func generateAnimationMP4(outputFile string) error {
 			<meta charset="utf-8">
 			<style>
 				html, body { 
-					background: transparent !important;
+					background-color: rgba(0,0,0,0) !important;
 					margin: 0;
 					padding: 0;
+					width: 500px;
+					height: 300px;
 				}
 				.container { 
 					display: flex; 
 					flex-direction: column; 
 					gap: 10px;
-					background: transparent;
+					background-color: rgba(0,0,0,0) !important;
 				}
 				.square { 
 					width: 30px; 
@@ -119,19 +121,20 @@ func generateAnimationMP4(outputFile string) error {
 		return err
 	}
 
-	// Inicia o navegador headless
+	// Inicia o navegador headless com flags para transparência
 	browser := rod.New().MustConnect()
 
-	// Configure browser for transparency
+	// Configure browser for transparency with specific options
 	page := browser.MustPage("")
-	page.MustSetViewport(800, 600, 1, false)
+	page.MustSetViewport(500, 300, 1, false)
 	page.MustNavigate("file://" + filepath.Join(getCWD(), tmpHtml))
 	page.MustWaitLoad()
 
-	// Set transparent background using a different approach
+	// Force transparent background via JavaScript
 	page.MustEval(`() => {
-		document.documentElement.style.backgroundColor = 'transparent';
-		document.body.style.backgroundColor = 'transparent';
+		document.documentElement.style.backgroundColor = 'rgba(0,0,0,0)';
+		document.body.style.backgroundColor = 'rgba(0,0,0,0)';
+		document.querySelector('.container').style.backgroundColor = 'rgba(0,0,0,0)';
 	}`)
 
 	// Espera animação inicializar
@@ -144,9 +147,10 @@ func generateAnimationMP4(outputFile string) error {
 		imgPath := filepath.Join(tmpDir, fmt.Sprintf("frame-%03d.png", i))
 
 		// Use the correct Screenshot method with transparency
-		data, _ := page.Screenshot(false, &proto.PageCaptureScreenshot{
-			Format:      proto.PageCaptureScreenshotFormatPng,
-			FromSurface: true, // This is crucial for transparency
+		data, _ := page.Screenshot(true, &proto.PageCaptureScreenshot{
+			Format:                proto.PageCaptureScreenshotFormatPng,
+			FromSurface:           true,
+			CaptureBeyondViewport: true,
 		})
 
 		// Save the screenshot
@@ -155,10 +159,17 @@ func generateAnimationMP4(outputFile string) error {
 		time.Sleep(time.Second / time.Duration(frameRate))
 	}
 
-	// Gera o GIF com ffmpeg
+	// Use ImageMagick to ensure transparency in PNGs
+	for i := 0; i < frameCount; i++ {
+		imgPath := filepath.Join(tmpDir, fmt.Sprintf("frame-%03d.png", i))
+		cmd := exec.Command("convert", imgPath, "-transparent", "white", imgPath)
+		cmd.Run()
+	}
+
+	// Gera o GIF com ffmpeg, ensuring transparency
 	cmd := exec.Command("ffmpeg", "-y", "-framerate", fmt.Sprint(frameRate),
 		"-i", filepath.Join(tmpDir, "frame-%03d.png"),
-		"-vf", "split[s0][s1];[s0]palettegen=reserve_transparent=1[p];[s1][p]paletteuse=alpha_threshold=128",
+		"-vf", "split[s0][s1];[s0]palettegen=reserve_transparent=1:transparency_color=ffffff[p];[s1][p]paletteuse=alpha_threshold=128",
 		"-loop", "0",
 		strings.Replace(outputFile, ".mp4", ".gif", 1),
 	)
